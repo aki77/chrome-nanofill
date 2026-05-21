@@ -1,0 +1,169 @@
+export type FillableElement =
+  | HTMLInputElement
+  | HTMLTextAreaElement
+  | HTMLSelectElement;
+
+const FILLABLE_INPUT_TYPES = new Set([
+  "text",
+  "search",
+  "email",
+  "url",
+  "tel",
+  "password",
+  "number",
+  "date",
+  "datetime-local",
+  "month",
+  "time",
+  "week",
+  "color",
+]);
+
+export function getFocusedFillable(): FillableElement | null {
+  let node: Element | null = document.activeElement;
+  while (node instanceof HTMLIFrameElement) {
+    try {
+      node = node.contentDocument?.activeElement ?? null;
+    } catch {
+      return null;
+    }
+  }
+  if (!node) return null;
+
+  if (node instanceof HTMLTextAreaElement) return node;
+  if (node instanceof HTMLSelectElement) return node;
+  if (node instanceof HTMLInputElement) {
+    return FILLABLE_INPUT_TYPES.has(node.type) ? node : null;
+  }
+  return null;
+}
+
+export type FieldDescriptor = {
+  tag: "input" | "textarea" | "select";
+  type?: string;
+  name?: string;
+  id?: string;
+  placeholder?: string;
+  ariaLabel?: string;
+  label?: string;
+  required?: boolean;
+  maxLength?: number;
+  pattern?: string;
+  autocomplete?: string;
+  options?: string[];
+  currentValue?: string;
+};
+
+export type FormContext = {
+  pageTitle: string;
+  pageUrl: string;
+  pageLanguage: string;
+  focused: FieldDescriptor;
+  siblings: FieldDescriptor[];
+};
+
+const MAX_SIBLINGS = 12;
+const MAX_TEXT = 120;
+
+function clip(text: string | null | undefined): string | undefined {
+  if (!text) return undefined;
+  const trimmed = text.replace(/\s+/g, " ").trim();
+  if (!trimmed) return undefined;
+  return trimmed.length > MAX_TEXT ? `${trimmed.slice(0, MAX_TEXT)}…` : trimmed;
+}
+
+function findLabel(el: Element): string | undefined {
+  if (
+    el instanceof HTMLInputElement ||
+    el instanceof HTMLTextAreaElement ||
+    el instanceof HTMLSelectElement
+  ) {
+    if (el.labels && el.labels.length > 0) {
+      return clip(Array.from(el.labels).map((l) => l.innerText).join(" "));
+    }
+    if (el.id) {
+      const labelEl = el.ownerDocument.querySelector(
+        `label[for="${CSS.escape(el.id)}"]`,
+      );
+      if (labelEl instanceof HTMLLabelElement) return clip(labelEl.innerText);
+    }
+    const wrappingLabel = el.closest("label");
+    if (wrappingLabel instanceof HTMLLabelElement)
+      return clip(wrappingLabel.innerText);
+  }
+  return undefined;
+}
+
+function describe(el: Element): FieldDescriptor | null {
+  if (el instanceof HTMLInputElement) {
+    return {
+      tag: "input",
+      type: el.type,
+      name: el.name || undefined,
+      id: el.id || undefined,
+      placeholder: clip(el.placeholder),
+      ariaLabel: clip(el.getAttribute("aria-label")),
+      label: findLabel(el),
+      required: el.required || undefined,
+      maxLength: el.maxLength > 0 ? el.maxLength : undefined,
+      pattern: el.pattern || undefined,
+      autocomplete: el.autocomplete || undefined,
+      currentValue: clip(el.value),
+    };
+  }
+  if (el instanceof HTMLTextAreaElement) {
+    return {
+      tag: "textarea",
+      name: el.name || undefined,
+      id: el.id || undefined,
+      placeholder: clip(el.placeholder),
+      ariaLabel: clip(el.getAttribute("aria-label")),
+      label: findLabel(el),
+      required: el.required || undefined,
+      maxLength: el.maxLength > 0 ? el.maxLength : undefined,
+      autocomplete: el.autocomplete || undefined,
+      currentValue: clip(el.value),
+    };
+  }
+  if (el instanceof HTMLSelectElement) {
+    return {
+      tag: "select",
+      name: el.name || undefined,
+      id: el.id || undefined,
+      ariaLabel: clip(el.getAttribute("aria-label")),
+      label: findLabel(el),
+      required: el.required || undefined,
+      options: Array.from(el.options)
+        .map((o) => clip(o.textContent) ?? "")
+        .filter(Boolean)
+        .slice(0, 32),
+      currentValue: clip(el.value),
+    };
+  }
+  return null;
+}
+
+export function buildContext(focused: FillableElement): FormContext {
+  const focusedDescriptor = describe(focused);
+  if (!focusedDescriptor) {
+    throw new Error("focused element is not describable");
+  }
+  const form = focused.form ?? focused.closest("form");
+  const siblings: FieldDescriptor[] = [];
+  if (form) {
+    for (const el of Array.from(form.elements)) {
+      if (el === focused) continue;
+      const desc = describe(el);
+      if (!desc) continue;
+      siblings.push(desc);
+      if (siblings.length >= MAX_SIBLINGS) break;
+    }
+  }
+  return {
+    pageTitle: clip(document.title) ?? "",
+    pageUrl: location.href,
+    pageLanguage: document.documentElement.lang || navigator.language || "en",
+    focused: focusedDescriptor,
+    siblings,
+  };
+}
