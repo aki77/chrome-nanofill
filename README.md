@@ -1,7 +1,7 @@
 # nanofill
 
 Chrome 拡張機能。ブラウザに内蔵された Gemini Nano (Prompt API) を使って、
-**現在フォーカスが当たっているフォーム入力欄** に、周辺のラベル・placeholder・
+**右クリックしたフォーム入力欄** に、周辺のラベル・placeholder・
 他フィールド・ページタイトルなどの文脈を踏まえた "それっぽい" ダミー値を入れます。
 
 ## 必要環境
@@ -27,32 +27,44 @@ pnpm build       # dist/ にビルド成果物を出力
 
 ## 使い方
 
-1. 任意のページのフォームをクリックしてフォーカスを当てる
-2. ツールバーの **Nanofill** アイコンをクリック
-3. ポップアップで **Fill focused field** をクリック
-4. フォーカスされていた入力欄にダミー値が入る
+1. 任意のページのフォーム要素 (input / textarea / select) を **右クリック**
+2. コンテキストメニューの **Fill with Nanofill** をクリック
+3. クリックした入力欄にダミー値が入る
 
 対応する要素:
 - `<input>` (text / search / email / url / tel / password / number / date / etc.)
-- `<textarea>`
+- `<textarea>` (高さに応じた長さのダミー文章を生成 — 詳細は下記)
 - `<select>` (オプションラベルからモデルが1つを選ぶ)
+
+### textarea の長さ自動推定
+
+`<textarea>` に対しては、`rows` 属性または `clientHeight / line-height` から実効行数を推定し、
+3 段階の長さヒントでモデルへ伝えます:
+
+| 実効行数 | lengthHint | 生成量 |
+|---------|-----------|------|
+| 1〜2 行 | short | 1〜2 文 |
+| 3〜6 行 | medium | 1 段落 (2〜4 文) |
+| 7 行以上 | long | 複数段落 (`\n\n` 区切り) |
 
 ## 構成
 
 ```
 src/
-├── content/content.ts              # フォーカス追跡 + 文脈収集 + DOM 反映 + Prompt API 呼び出し
-├── popup/                          # 状態表示 + 実行ボタン
+├── background/background.ts        # service worker: contextMenu 管理 + fill トリガー
+├── content/content.ts              # 右クリック追跡 + 文脈収集 + DOM 反映 + Prompt API 呼び出し
 └── lib/
-    ├── context.ts                  # フォーカス検知 / FormContext 構築
+    ├── context.ts                  # フォーカス / 右クリック要素検知 / FormContext 構築
     ├── prompt.ts                   # LanguageModel ラッパー (Structured Output)
     └── types.ts                    # メッセージ型
 ```
 
-Prompt API の呼び出しは content script 内で行うため、メッセージ往復は popup → content の 1 往復だけです。 service worker は使っていません。
+右クリック → background (service worker) が `chrome.contextMenus.onClicked` を受け取り、
+`frameId` を指定して該当フレームの content script へメッセージを送ります。
+Prompt API の呼び出しは content script 内で行います。
 
 ## 既知の制限
 
-- **同一オリジン iframe のみ対応**: クロスオリジン iframe 内のフィールドにフォーカスがある場合、ポップアップを開くタイミングで親フレームと子フレームの間でフォーカス情報を同期できないため、フィルに失敗することがあります。フィルが想定どおり動かないときは、対象フィールドを再度クリックしてからポップアップを開き直してください。
 - 生成された値は AI の出力なので、フィールドの厳密なバリデーションを必ずしも満たさない場合があります。
+- Chrome 拡張が content script を注入できないページ (`chrome://` など) では動作しません。
 - 初回利用時はモデルダウンロード (~数GB) が完了するまで生成は待たされます。

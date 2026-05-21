@@ -1,13 +1,6 @@
 import { defineConfig } from "vite";
 import { resolve } from "node:path";
-import {
-  copyFileSync,
-  mkdirSync,
-  rmSync,
-  existsSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
+import { copyFileSync, mkdirSync, rmSync } from "node:fs";
 
 const root = resolve(__dirname);
 
@@ -20,7 +13,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         content: resolve(root, "src/content/content.ts"),
-        popup: resolve(root, "src/popup/popup.html"),
+        background: resolve(root, "src/background/background.ts"),
       },
       output: {
         entryFileNames: "[name].js",
@@ -45,17 +38,6 @@ export default defineConfig({
           resolve(root, "manifest.json"),
           resolve(dist, "manifest.json"),
         );
-
-        const nestedPopup = resolve(dist, "src/popup/popup.html");
-        const flatPopup = resolve(dist, "popup.html");
-        if (existsSync(nestedPopup)) {
-          const html = readFileSync(nestedPopup, "utf8").replace(
-            /(\.\.\/)+/g,
-            "./",
-          );
-          writeFileSync(flatPopup, html);
-          rmSync(resolve(dist, "src"), { recursive: true, force: true });
-        }
 
         rmSync(resolve(dist, "icons/icon.svg"), { force: true });
       },

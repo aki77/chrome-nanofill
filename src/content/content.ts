@@ -1,6 +1,7 @@
 import {
   buildContext,
   getFocusedFillable,
+  toFillable,
   type FillableElement,
 } from "../lib/context";
 import {
@@ -8,14 +9,10 @@ import {
   isPromptApiSupported,
   probeAvailability,
 } from "../lib/prompt";
-import type {
-  AvailabilityProbe,
-  AvailabilityResult,
-  FillResult,
-  FillTrigger,
-} from "../lib/types";
+import type { FillResult, FillTrigger } from "../lib/types";
 
 let lastFocused: FillableElement | null = null;
+let lastRightClickedTarget: FillableElement | null = null;
 
 function trackFocus(): void {
   const update = () => {
@@ -27,10 +24,21 @@ function trackFocus(): void {
   update();
 }
 
+function trackContextMenu(): void {
+  document.addEventListener(
+    "contextmenu",
+    (event) => {
+      lastRightClickedTarget = toFillable(event.target as Element | null);
+    },
+    true,
+  );
+}
+
 function getTargetElement(): FillableElement | null {
+  if (lastRightClickedTarget?.isConnected) return lastRightClickedTarget;
   const current = getFocusedFillable();
   if (current) return current;
-  if (lastFocused && lastFocused.isConnected) return lastFocused;
+  if (lastFocused?.isConnected) return lastFocused;
   return null;
 }
 
@@ -65,6 +73,7 @@ async function handleFill(): Promise<FillResult> {
   }
 
   const target = getTargetElement();
+  lastRightClickedTarget = null;
   if (!target) return { ok: false, reason: "no-focus" };
 
   const availability = await probeAvailability();
@@ -89,34 +98,17 @@ async function handleFill(): Promise<FillResult> {
   }
 }
 
-async function handleAvailability(): Promise<AvailabilityResult> {
-  if (!isPromptApiSupported()) {
-    return { ok: false, reason: "api-unavailable" };
-  }
-  const snapshot = await probeAvailability();
-  return { ok: true, status: snapshot.status };
-}
-
-const isTopFrame = window.top === window;
-
-function hasFillTarget(): boolean {
-  return getTargetElement() !== null;
-}
-
-chrome.runtime.onMessage.addListener(
-  (message: FillTrigger | AvailabilityProbe, _sender, sendResponse) => {
-    if (message?.type === "nanofill/fill") {
-      if (!hasFillTarget()) return false;
+try {
+  chrome.runtime.onMessage.addListener(
+    (message: FillTrigger, _sender, sendResponse) => {
+      if (message?.type !== "nanofill/fill") return false;
       (async () => sendResponse(await handleFill()))();
       return true;
-    }
-    if (message?.type === "nanofill/availability") {
-      if (!isTopFrame) return false;
-      (async () => sendResponse(await handleAvailability()))();
-      return true;
-    }
-    return false;
-  },
-);
+    },
+  );
+} catch {
+  // Extension context invalidated (e.g. after extension reload) — safe to ignore
+}
 
 trackFocus();
+trackContextMenu();

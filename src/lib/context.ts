@@ -19,6 +19,18 @@ const FILLABLE_INPUT_TYPES = new Set([
   "color",
 ]);
 
+export function toFillable(el: Element | null): FillableElement | null {
+  if (!el) return null;
+  if (el instanceof HTMLTextAreaElement) return el;
+  if (el instanceof HTMLSelectElement) return el;
+  if (el instanceof HTMLInputElement) {
+    return FILLABLE_INPUT_TYPES.has(el.type) ? el : null;
+  }
+  const closest = el.closest("input,textarea,select");
+  if (!closest) return null;
+  return toFillable(closest);
+}
+
 export function getFocusedFillable(): FillableElement | null {
   let node: Element | null = document.activeElement;
   while (node instanceof HTMLIFrameElement) {
@@ -28,14 +40,7 @@ export function getFocusedFillable(): FillableElement | null {
       return null;
     }
   }
-  if (!node) return null;
-
-  if (node instanceof HTMLTextAreaElement) return node;
-  if (node instanceof HTMLSelectElement) return node;
-  if (node instanceof HTMLInputElement) {
-    return FILLABLE_INPUT_TYPES.has(node.type) ? node : null;
-  }
-  return null;
+  return toFillable(node);
 }
 
 export type FieldDescriptor = {
@@ -52,6 +57,7 @@ export type FieldDescriptor = {
   autocomplete?: string;
   options?: string[];
   currentValue?: string;
+  lengthHint?: LengthHint;
 };
 
 export type FormContext = {
@@ -62,8 +68,17 @@ export type FormContext = {
   siblings: FieldDescriptor[];
 };
 
+type LengthHint = "short" | "medium" | "long";
+
 const MAX_SIBLINGS = 12;
 const MAX_TEXT = 120;
+
+function estimateTextareaLengthHint(el: HTMLTextAreaElement): LengthHint {
+  const rows = el.rows;
+  if (rows <= 2) return "short";
+  if (rows <= 6) return "medium";
+  return "long";
+}
 
 function clip(text: string | null | undefined): string | undefined {
   if (!text) return undefined;
@@ -123,6 +138,7 @@ function describe(el: Element): FieldDescriptor | null {
       maxLength: el.maxLength > 0 ? el.maxLength : undefined,
       autocomplete: el.autocomplete || undefined,
       currentValue: clip(el.value),
+      lengthHint: estimateTextareaLengthHint(el),
     };
   }
   if (el instanceof HTMLSelectElement) {

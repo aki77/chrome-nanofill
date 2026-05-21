@@ -12,14 +12,3 @@ export type FillFailureReason =
   | "downloading"
   | "generation-failed";
 
-export type AvailabilityProbe = { type: "nanofill/availability" };
-
-export type AvailabilityResult =
-  | { ok: true; status: AvailabilityStatus; downloadProgress?: number }
-  | { ok: false; reason: "no-content-script" | "api-unavailable" };
-
-export type AvailabilityStatus =
-  | "available"
-  | "downloadable"
-  | "downloading"
-  | "unavailable";

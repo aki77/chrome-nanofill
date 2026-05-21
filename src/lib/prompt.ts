@@ -10,7 +10,13 @@ Rules:
 - For <select>, pick exactly one of the provided option labels verbatim.
 - The value MUST be in the language specified by "language" in the user message (auto-detected from the page).
 - Use clearly fictitious data — no real personal information, real phone numbers, or real addresses.
-- Output ONLY the value itself. No quotes, no explanation, no surrounding text.`;
+- Output ONLY the value itself. No quotes, no explanation, no surrounding text.
+- For <textarea>, generate naturally flowing prose:
+  - If lengthHint is "short", output 1-2 sentences.
+  - If lengthHint is "medium", output 2-4 sentences in a single paragraph.
+  - If lengthHint is "long", output multiple short paragraphs separated by \\n\\n (single \\n inside a paragraph if needed).
+- If maxLength is present on a textarea, the total character count MUST stay within it.
+- For <input> and <select>, ignore the textarea length rules.`;
 
 const RESPONSE_CONSTRAINT = {
   type: "object",
