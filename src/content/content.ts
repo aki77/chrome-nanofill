@@ -10,6 +10,7 @@ import {
   probeAvailability,
 } from "../lib/prompt";
 import type { FillResult, FillTrigger } from "../lib/types";
+import { showFeedback } from "./feedback";
 
 let lastFocused: FillableElement | null = null;
 let lastRightClickedTarget: FillableElement | null = null;
@@ -81,15 +82,25 @@ async function handleFill(): Promise<FillResult> {
     return { ok: false, reason: "model-unavailable" };
   }
 
+  const feedback = showFeedback(target);
   try {
     const context = buildContext(target);
-    const value = await generateValue({ context });
+    const value = await generateValue({
+      context,
+      onDownloadProgress:
+        availability.status === "available"
+          ? undefined
+          : (loaded) => feedback.setDownloadProgress(loaded),
+    });
     if (!target.isConnected) {
+      feedback.fail();
       return { ok: false, reason: "no-focus" };
     }
     setValue(target, value);
+    feedback.succeed();
     return { ok: true, value };
   } catch (err) {
+    feedback.fail();
     return {
       ok: false,
       reason: "generation-failed",
