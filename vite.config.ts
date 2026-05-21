@@ -56,6 +56,8 @@ export default defineConfig({
           writeFileSync(flatPopup, html);
           rmSync(resolve(dist, "src"), { recursive: true, force: true });
         }
+
+        rmSync(resolve(dist, "icons/icon.svg"), { force: true });
       },
     },
   ],
