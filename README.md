@@ -53,7 +53,6 @@ A status badge is shown in the top-right corner of the field during generation:
 | Analyzing page | ✨ Analyzing page… |
 | Planning persona (form fill) | ✨ Planning form persona… |
 | Generating value | ✨ Filling… |
-| Downloading model | ⬇ Downloading model N% |
 | Failed | ⚠️ Failed (red · disappears after 1.5 s) |
 
 ### Auto-estimation of textarea length
@@ -74,23 +73,26 @@ The text of the page containing the form is summarized with the Summarizer API a
 
 ```
 src/
-├── background/background.ts   # service worker: contextMenu management + fill trigger
+├── background/background.ts   # service worker: contextMenu management + fill trigger + offscreen lifetime
 ├── content/
-│   ├── content.ts             # right-click tracking + context collection + DOM update + Prompt API calls
+│   ├── content.ts             # right-click tracking + context collection + DOM update
 │   └── feedback.ts            # generation indicator (badge + field highlight)
+├── offscreen/
+│   ├── offscreen.html         # minimal HTML shell for the offscreen document
+│   └── offscreen.ts           # long-lived LanguageModel sessions + message handler
 └── lib/
     ├── cache.ts               # session storage cache for page summaries
     ├── context.ts             # focus / right-click element detection / FormContext + PlannerContext construction
     ├── extract.ts             # page body extraction via Defuddle
     ├── persona.ts             # Persona type + JSON Schema for planner output
-    ├── prompt.ts              # LanguageModel wrapper (Structured Output, persona planner, session reuse)
+    ├── prompt.ts              # thin client: sends LLM requests to the offscreen document
     ├── summarize.ts           # Summarizer API wrapper (map-reduce chunk support)
     └── types.ts               # message types
 ```
 
-Right-click → the background service worker receives `chrome.contextMenus.onClicked` and sends either a `nanofill/fill` or `nanofill/fill-all` message to the content script in the target frame using `frameId`. Prompt API / Summarizer API calls are made inside the content script.
+Right-click → the background service worker receives `chrome.contextMenus.onClicked` and sends either a `nanofill/fill` or `nanofill/fill-all` message to the content script in the target frame using `frameId`. Prompt API calls are routed through an **offscreen document** that keeps two long-lived `LanguageModel` sessions (one for value generation, one for persona planning) alive across all tabs for the lifetime of the extension. The content script sends `nanofill/llm/*` messages via `chrome.runtime.sendMessage`; the offscreen handler responds by calling `session.clone()` → `prompt()` → `destroy()` and returning the result. This means `LanguageModel.create()` runs only once per session type (on extension install/startup), not on every fill request.
 
-For whole-form fill, the content script first generates a **persona** — a coherent fictional identity (name, email, address, scenario, tone, etc.) for the entire form — using a dedicated planner LLM call. Fields are then filled in parallel (concurrency = 2) using `session.clone()` to share a single parent `LanguageModel` session, avoiding repeated system-prompt setup. Each field receives the persona as explicit context, ensuring cross-field consistency (name / email / address / free-text all belong to the same fictional person). If persona generation fails, fields are filled in parallel without persona context.
+For whole-form fill, the content script first generates a **persona** — a coherent fictional identity (name, email, address, scenario, tone, etc.) for the entire form. Fields are then filled in parallel (concurrency = 2), each receiving the persona as explicit context, ensuring cross-field consistency. If persona generation fails, fields are filled without persona context.
 
 ## Known Limitations
 

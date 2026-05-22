@@ -18,8 +18,24 @@ function createMenu(): void {
   });
 }
 
-chrome.runtime.onInstalled.addListener(createMenu);
-chrome.runtime.onStartup.addListener(createMenu);
+async function ensureOffscreen(): Promise<void> {
+  const has = await chrome.offscreen.hasDocument();
+  if (has) return;
+  await chrome.offscreen.createDocument({
+    url: chrome.runtime.getURL("offscreen.html"),
+    reasons: ["WORKERS" as chrome.offscreen.Reason],
+    justification: "Host the long-lived LanguageModel session shared across tabs.",
+  });
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  createMenu();
+  void ensureOffscreen();
+});
+chrome.runtime.onStartup.addListener(() => {
+  createMenu();
+  void ensureOffscreen();
+});
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (!tab?.id) return;
@@ -34,14 +50,16 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     options.frameId = info.frameId;
   }
 
-  chrome.tabs
-    .sendMessage(tab.id, trigger, options)
-    .then((response: FillResult | undefined) => {
-      if (!response?.ok) {
-        console.warn("[Nanofill] Fill failed:", response);
-      }
-    })
-    .catch((err: unknown) => {
-      console.warn("[Nanofill] Could not reach content script:", err);
-    });
+  void ensureOffscreen().then(() => {
+    chrome.tabs
+      .sendMessage(tab.id!, trigger!, options)
+      .then((response: FillResult | undefined) => {
+        if (!response?.ok) {
+          console.warn("[Nanofill] Fill failed:", response);
+        }
+      })
+      .catch((err: unknown) => {
+        console.warn("[Nanofill] Could not reach content script:", err);
+      });
+  });
 });
