@@ -40,7 +40,7 @@ pnpm build       # outputs build artifacts to dist/
 5. Because later fields receive the already-filled values as context, the model naturally produces a consistent fictional identity across name / email / address and free-text answers
 
 Supported elements:
-- `<input>` (text / search / email / url / tel / password / number / date / etc.)
+- `<input>` (text / search / email / url / tel / password / number / date / etc.) — outputs a short word, phrase, or at most one sentence based on the field's label/name
 - `<textarea>` (generates dummy text scaled to the element's height — see below)
 - `<select>` (model picks one option based on the option labels)
 
@@ -54,9 +54,15 @@ A status badge is shown in the top-right corner of the field during generation:
 | Generating value | ✨ Filling… |
 | Failed | ⚠️ Failed (red · disappears after 1.5 s) |
 
+### Length control for `<input>`
+
+For `<input>` (single-line), the model outputs a short value rather than prose:
+- If the label, placeholder, or name implies a single word or noun phrase (e.g. "name", "title", "company"), it outputs a single word or short phrase with no trailing punctuation.
+- Even when a sentence-like value fits (e.g. a one-line headline), it outputs at most one short sentence and never inserts line breaks.
+
 ### Auto-estimation of textarea length
 
-For `<textarea>`, the effective row count is estimated from the `rows` attribute or `clientHeight / line-height`, and passed to the model as one of three length hints:
+For `<textarea>`, the effective row count is estimated and passed to the model as one of three length hints. If the `rows` attribute is explicitly set, that value is used directly; otherwise the browser-default row count is compared against an estimate derived from `clientHeight / line-height`, and the larger value wins.
 
 | Effective rows | lengthHint | Output |
 |---------------|-----------|--------|

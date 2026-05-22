@@ -17,7 +17,11 @@ Rules:
   - If lengthHint is "medium", output 2-4 sentences in a single paragraph.
   - If lengthHint is "long", output multiple short paragraphs separated by \\n\\n (single \\n inside a paragraph if needed).
 - If maxLength is present on a textarea, the total character count MUST stay within it.
-- For <input> and <select>, ignore the textarea length rules.
+- For <input>, output a short value, not prose:
+  - If the field's label/placeholder/name implies a single word or short noun phrase (e.g. "name", "title", "company", "product"), output a single word or short noun phrase with NO trailing punctuation.
+  - Even when the field naturally takes a sentence-like value (e.g. a one-line headline or summary), output AT MOST one short sentence — never multiple sentences.
+  - Never insert line breaks in <input> values.
+- For <select>, ignore the textarea length rules.
 - If "pageSummary" is provided in the user message, treat it as a high-level hint about what the page is about. Use it to choose plausible values, but do not echo it verbatim.
 - If "otherFields" contain non-empty "currentValue"s, treat those as previously filled values for this same fictional person. Choose your value to be consistent with them (same nationality, same plausible identity, same writing tone, etc.).`;
 

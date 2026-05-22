@@ -75,9 +75,25 @@ const MAX_SIBLINGS = 12;
 const MAX_TEXT = 120;
 
 function estimateTextareaLengthHint(el: HTMLTextAreaElement): LengthHint {
-  const rows = el.rows;
-  if (rows <= 2) return "short";
-  if (rows <= 6) return "medium";
+  let effectiveRows = el.rows;
+
+  if (!el.getAttribute("rows")) {
+    const style = el.ownerDocument.defaultView?.getComputedStyle(el);
+    if (style && el.clientHeight > 0) {
+      let lh = parseFloat(style.lineHeight);
+      if (!Number.isFinite(lh) || lh <= 0) {
+        const fs = parseFloat(style.fontSize);
+        if (Number.isFinite(fs) && fs > 0) lh = fs * 1.2;
+      }
+      if (Number.isFinite(lh) && lh > 0) {
+        const estimated = Math.round(el.clientHeight / lh);
+        if (estimated > effectiveRows) effectiveRows = estimated;
+      }
+    }
+  }
+
+  if (effectiveRows <= 2) return "short";
+  if (effectiveRows <= 6) return "medium";
   return "long";
 }
 
