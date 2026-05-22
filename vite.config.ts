@@ -4,8 +4,11 @@ import { copyFileSync, mkdirSync, rmSync } from "node:fs";
 
 const root = resolve(__dirname);
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   base: "./",
+  define: {
+    __DEV__: mode === "development",
+  },
   build: {
     outDir: "dist",
     emptyOutDir: true,
@@ -43,4 +46,4 @@ export default defineConfig({
       },
     },
   ],
-});
+}));

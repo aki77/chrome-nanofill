@@ -20,6 +20,7 @@ import type { Persona } from "../lib/persona";
 import { summarizePageText } from "../lib/summarize";
 import type { FillResult, FillTrigger } from "../lib/types";
 import { showFeedback, type FeedbackHandle } from "./feedback";
+import { mark, time } from "../lib/debug";
 
 const CONCURRENCY = 2;
 
@@ -165,6 +166,7 @@ async function fillOne(
 }
 
 async function handleFill(): Promise<FillResult> {
+  mark("handleFill start");
   if (!isPromptApiSupported()) {
     return { ok: false, reason: "api-unavailable" };
   }
@@ -181,14 +183,19 @@ async function handleFill(): Promise<FillResult> {
   const feedback = showFeedback(target);
   try {
     feedback.setStatus("✨ Analyzing page…");
-    const pageSummary = await preparePageSummary(target).catch(() => null);
+    const pageSummary = await time("preparePageSummary (single)", () =>
+      preparePageSummary(target).catch(() => null),
+    );
 
     feedback.setStatus("✨ Filling…");
-    const result = await fillOne(target, feedback, {
-      pageSummary,
-      trackDownload: availability.status !== "available",
-    });
+    const result = await time("fillOne (single)", () =>
+      fillOne(target, feedback, {
+        pageSummary,
+        trackDownload: availability.status !== "available",
+      }),
+    );
     if (result.ok) {
+      mark("first field filled (single)");
       feedback.succeed();
       return { ok: true, value: result.value };
     }
@@ -257,42 +264,56 @@ async function handleFillAll(): Promise<FillResult> {
     return { ok: true, mode: "all", filled: 0, skipped, failed: 0 };
   }
 
+  mark("handleFillAll start");
   const planningFeedback = showFeedback(target);
   planningFeedback.setStatus("✨ Analyzing page…");
 
-  const [pageSummary, parent] = await Promise.all([
-    preparePageSummary(target).catch(() => null),
-    LanguageModel.create({
-      initialPrompts: [{ role: "system" as const, content: SYSTEM_PROMPT }],
-    }),
-  ]);
+  const [pageSummary, parent] = await time("summary + parent.create (parallel)", () =>
+    Promise.all([
+      time("preparePageSummary (all)", () =>
+        preparePageSummary(target).catch(() => null),
+      ),
+      time("LanguageModel.create (parent)", () =>
+        LanguageModel.create({
+          initialPrompts: [{ role: "system" as const, content: SYSTEM_PROMPT }],
+        }),
+      ),
+    ]),
+  );
 
   let filled = 0;
   let failed = 0;
+  let firstFieldDone = false;
 
   try {
     planningFeedback.setStatus("✨ Planning form persona…");
     const plannerInput = buildPlannerContext(form, {
       pageSummary: pageSummary ?? undefined,
     });
-    const persona = await generatePersona({ input: plannerInput }).catch(
-      () => undefined,
+    const persona = await time("generatePersona", () =>
+      generatePersona({ input: plannerInput }).catch(() => undefined),
     );
     planningFeedback.dismiss();
 
     const results = await runPool(fields, CONCURRENCY, async (field) => {
-      const child = await parent.clone();
+      const child = await time("parent.clone", () => parent.clone());
       const fb = showFeedback(field, { multi: true });
       fb.setStatus("✨ Filling…");
 
       try {
-        const result = await fillOne(field, fb, {
-          pageSummary,
-          trackDownload: false,
-          persona,
-          session: child,
-        });
+        const result = await time("fillOne (pool)", () =>
+          fillOne(field, fb, {
+            pageSummary,
+            trackDownload: false,
+            persona,
+            session: child,
+          }),
+        );
         if (result.ok) {
+          if (!firstFieldDone) {
+            firstFieldDone = true;
+            mark("first field filled (all)");
+          }
           fb.succeed();
         } else {
           fb.fail();

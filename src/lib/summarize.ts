@@ -1,3 +1,5 @@
+import { mark, time } from "./debug";
+
 const SHARED_CONTEXT =
   "This text is a web page that contains (or links to) a form the user is filling. " +
   "Identify what the page is about so that another model can generate plausible dummy data for the form.";
@@ -33,12 +35,14 @@ export async function summarizePageText(
 
   let summarizer: Summarizer;
   try {
-    summarizer = await Summarizer.create({
-      ...SUMMARIZE_OPTIONS,
-      sharedContext: SHARED_CONTEXT,
-      outputLanguage: options.language,
-      signal: options.signal,
-    });
+    summarizer = await time("Summarizer.create", () =>
+      Summarizer.create({
+        ...SUMMARIZE_OPTIONS,
+        sharedContext: SHARED_CONTEXT,
+        outputLanguage: options.language,
+        signal: options.signal,
+      }),
+    );
   } catch {
     return null;
   }
@@ -50,19 +54,24 @@ export async function summarizePageText(
     });
 
     if (usage <= quota * CHUNK_SAFETY) {
-      return await summarizer.summarize(text, { signal: options.signal });
+      return await time("summarizer.summarize (single)", () =>
+        summarizer.summarize(text, { signal: options.signal }),
+      );
     }
 
     // map-reduce: split by paragraph → summarize each chunk → concat → re-summarize
     const tokensPerChar = text.length > 0 ? usage / text.length : 1;
     const chunks = chunkByQuota(text, quota * CHUNK_SAFETY, tokensPerChar);
     const limited = chunks.slice(0, MAX_CHUNKS);
+    mark(`summarizer map-reduce: ${limited.length} chunks`);
 
     const partials: string[] = [];
-    for (const chunk of limited) {
+    for (let i = 0; i < limited.length; i++) {
       try {
         partials.push(
-          await summarizer.summarize(chunk, { signal: options.signal }),
+          await time(`summarizer.summarize (chunk ${i + 1}/${limited.length})`, () =>
+            summarizer.summarize(limited[i], { signal: options.signal }),
+          ),
         );
       } catch {
         // ignore individual chunk failures
@@ -72,7 +81,9 @@ export async function summarizePageText(
 
     const merged = partials.join("\n\n");
     try {
-      return await summarizer.summarize(merged, { signal: options.signal });
+      return await time("summarizer.summarize (merge)", () =>
+        summarizer.summarize(merged, { signal: options.signal }),
+      );
     } catch {
       return merged;
     }

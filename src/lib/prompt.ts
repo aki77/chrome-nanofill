@@ -1,5 +1,6 @@
 import type { FormContext, PlannerContext } from "./context";
 import { type Persona, PERSONA_SCHEMA } from "./persona";
+import { time } from "./debug";
 
 export const SYSTEM_PROMPT = `You are a helpful assistant that generates plausible-looking dummy values for web form fields during development and testing.
 
@@ -67,6 +68,14 @@ export type GeneratePersonaOptions = {
   signal?: AbortSignal;
 };
 
+function parseValueResponse(raw: string): string {
+  const parsed = JSON.parse(raw) as { value: unknown };
+  if (typeof parsed.value !== "string") {
+    throw new Error("Model returned a non-string value.");
+  }
+  return parsed.value;
+}
+
 function buildUserPrompt(context: FormContext): string {
   return JSON.stringify({
     language: context.pageLanguage,
@@ -90,27 +99,27 @@ export async function generateValue({
     throw new Error("Prompt API is not supported in this browser.");
   }
 
-  const session = await LanguageModel.create({
-    initialPrompts: [{ role: "system", content: SYSTEM_PROMPT }],
-    monitor(m) {
-      if (!onDownloadProgress) return;
-      m.addEventListener("downloadprogress", (event) => {
-        onDownloadProgress(event.loaded, event.total ?? 0);
-      });
-    },
-  });
+  const session = await time("LanguageModel.create (generateValue)", () =>
+    LanguageModel.create({
+      initialPrompts: [{ role: "system", content: SYSTEM_PROMPT }],
+      monitor(m) {
+        if (!onDownloadProgress) return;
+        m.addEventListener("downloadprogress", (event) => {
+          onDownloadProgress(event.loaded, event.total ?? 0);
+        });
+      },
+    }),
+  );
 
   try {
-    const raw = await session.prompt(buildUserPrompt(context), {
-      responseConstraint: RESPONSE_CONSTRAINT,
-      signal,
-    });
+    const raw = await time("session.prompt (generateValue)", () =>
+      session.prompt(buildUserPrompt(context), {
+        responseConstraint: RESPONSE_CONSTRAINT,
+        signal,
+      }),
+    );
 
-    const parsed = JSON.parse(raw) as { value: unknown };
-    if (typeof parsed.value !== "string") {
-      throw new Error("Model returned a non-string value.");
-    }
-    return parsed.value;
+    return parseValueResponse(raw);
   } finally {
     session.destroy();
   }
@@ -121,16 +130,14 @@ export async function generateValueWithSession(
   context: FormContext,
   opts?: { signal?: AbortSignal },
 ): Promise<string> {
-  const raw = await session.prompt(buildUserPrompt(context), {
-    responseConstraint: RESPONSE_CONSTRAINT,
-    signal: opts?.signal,
-  });
+  const raw = await time("session.prompt (generateValueWithSession)", () =>
+    session.prompt(buildUserPrompt(context), {
+      responseConstraint: RESPONSE_CONSTRAINT,
+      signal: opts?.signal,
+    }),
+  );
 
-  const parsed = JSON.parse(raw) as { value: unknown };
-  if (typeof parsed.value !== "string") {
-    throw new Error("Model returned a non-string value.");
-  }
-  return parsed.value;
+  return parseValueResponse(raw);
 }
 
 export async function generatePersona({
@@ -142,15 +149,17 @@ export async function generatePersona({
     throw new Error("Prompt API is not supported in this browser.");
   }
 
-  const session = await LanguageModel.create({
-    initialPrompts: [{ role: "system", content: PLANNER_SYSTEM_PROMPT }],
-    monitor(m) {
-      if (!onDownloadProgress) return;
-      m.addEventListener("downloadprogress", (event) => {
-        onDownloadProgress(event.loaded, event.total ?? 0);
-      });
-    },
-  });
+  const session = await time("LanguageModel.create (generatePersona)", () =>
+    LanguageModel.create({
+      initialPrompts: [{ role: "system", content: PLANNER_SYSTEM_PROMPT }],
+      monitor(m) {
+        if (!onDownloadProgress) return;
+        m.addEventListener("downloadprogress", (event) => {
+          onDownloadProgress(event.loaded, event.total ?? 0);
+        });
+      },
+    }),
+  );
 
   try {
     const userPrompt = JSON.stringify({
@@ -163,10 +172,12 @@ export async function generatePersona({
       formFields: input.formFields,
     });
 
-    const raw = await session.prompt(userPrompt, {
-      responseConstraint: PERSONA_SCHEMA,
-      signal,
-    });
+    const raw = await time("session.prompt (generatePersona)", () =>
+      session.prompt(userPrompt, {
+        responseConstraint: PERSONA_SCHEMA,
+        signal,
+      }),
+    );
 
     const parsed = JSON.parse(raw) as Persona;
     return parsed;
