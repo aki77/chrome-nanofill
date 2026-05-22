@@ -163,8 +163,23 @@ function describe(el: Element): FieldDescriptor | null {
   return null;
 }
 
-export function detectLanguage(doc: Document): string {
-  return doc.documentElement.lang || navigator.language || "en";
+const SUPPORTED_OUTPUT_LANGUAGES = ["en", "es", "ja"] as const;
+type SupportedOutputLanguage = (typeof SUPPORTED_OUTPUT_LANGUAGES)[number];
+const SUPPORTED_OUTPUT_LANGUAGE_SET = new Set<string>(SUPPORTED_OUTPUT_LANGUAGES);
+
+function normalizeLanguage(raw: string): SupportedOutputLanguage | null {
+  const base = raw.split("-")[0].toLowerCase();
+  return SUPPORTED_OUTPUT_LANGUAGE_SET.has(base) ? (base as SupportedOutputLanguage) : null;
+}
+
+export function detectLanguage(doc: Document): SupportedOutputLanguage {
+  for (const c of [doc.documentElement.lang, navigator.language]) {
+    if (c) {
+      const lang = normalizeLanguage(c);
+      if (lang) return lang;
+    }
+  }
+  return "en";
 }
 
 export function buildContext(
