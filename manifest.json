@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Nanofill",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Fill form fields with context-aware dummy data via right-click, powered by Chrome's built-in Gemini Nano.",
   "minimum_chrome_version": "138",
   "permissions": ["contextMenus", "storage"],

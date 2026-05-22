@@ -14,7 +14,7 @@ import {
 } from "../lib/prompt";
 import { summarizePageText } from "../lib/summarize";
 import type { FillResult, FillTrigger } from "../lib/types";
-import { showFeedback } from "./feedback";
+import { showFeedback, type FeedbackHandle } from "./feedback";
 
 let lastFocused: FillableElement | null = null;
 let lastRightClickedTarget: FillableElement | null = null;
@@ -100,6 +100,37 @@ async function preparePageSummary(
   }
 }
 
+type FillOneOptions = {
+  pageSummary: string | null;
+  trackDownload: boolean;
+};
+
+async function fillOne(
+  target: FillableElement,
+  feedback: FeedbackHandle,
+  opts: FillOneOptions,
+): Promise<{ ok: true; value: string } | { ok: false; detail?: string }> {
+  const context = buildContext(target, {
+    pageSummary: opts.pageSummary ?? undefined,
+  });
+  try {
+    const value = await generateValue({
+      context,
+      onDownloadProgress: opts.trackDownload
+        ? (loaded) => feedback.setDownloadProgress(loaded)
+        : undefined,
+    });
+    if (!target.isConnected) return { ok: false, detail: "disconnected" };
+    setValue(target, value);
+    return { ok: true, value };
+  } catch (err) {
+    return {
+      ok: false,
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 async function handleFill(): Promise<FillResult> {
   if (!isPromptApiSupported()) {
     return { ok: false, reason: "api-unavailable" };
@@ -120,23 +151,20 @@ async function handleFill(): Promise<FillResult> {
     const pageSummary = await preparePageSummary(target).catch(() => null);
 
     feedback.setStatus("✨ Filling…");
-    const context = buildContext(target, {
-      pageSummary: pageSummary ?? undefined,
+    const result = await fillOne(target, feedback, {
+      pageSummary,
+      trackDownload: availability.status !== "available",
     });
-    const value = await generateValue({
-      context,
-      onDownloadProgress:
-        availability.status === "available"
-          ? undefined
-          : (loaded) => feedback.setDownloadProgress(loaded),
-    });
-    if (!target.isConnected) {
-      feedback.fail();
-      return { ok: false, reason: "no-focus" };
+    if (result.ok) {
+      feedback.succeed();
+      return { ok: true, value: result.value };
     }
-    setValue(target, value);
-    feedback.succeed();
-    return { ok: true, value };
+    feedback.fail();
+    return {
+      ok: false,
+      reason: "generation-failed",
+      detail: result.detail,
+    };
   } catch (err) {
     feedback.fail();
     return {
@@ -147,12 +175,98 @@ async function handleFill(): Promise<FillResult> {
   }
 }
 
+function collectFillableFields(form: HTMLFormElement): FillableElement[] {
+  const out: FillableElement[] = [];
+  for (const el of Array.from(form.elements)) {
+    const f = toFillable(el);
+    if (!f) continue;
+    if (f.disabled) continue;
+    if (
+      "readOnly" in f &&
+      (f as HTMLInputElement | HTMLTextAreaElement).readOnly
+    )
+      continue;
+    out.push(f);
+  }
+  return out;
+}
+
+function isEmpty(el: FillableElement): boolean {
+  if (el instanceof HTMLSelectElement) {
+    if (el.multiple) return el.selectedOptions.length === 0;
+    if (el.selectedIndex < 0) return true;
+    return el.value.trim() === "";
+  }
+  return el.value === "";
+}
+
+async function handleFillAll(): Promise<FillResult> {
+  if (!isPromptApiSupported()) {
+    return { ok: false, reason: "api-unavailable" };
+  }
+
+  const target = getTargetElement();
+  lastRightClickedTarget = null;
+  if (!target) return { ok: false, reason: "no-focus" };
+
+  const form = target.form ?? target.closest("form");
+  if (!form) return { ok: false, reason: "no-focus" };
+
+  const availability = await probeAvailability();
+  if (availability.status === "unavailable") {
+    return { ok: false, reason: "model-unavailable" };
+  }
+
+  const all = collectFillableFields(form);
+  const fields = all.filter(isEmpty);
+  const skipped = all.length - fields.length;
+  if (fields.length === 0) {
+    return { ok: true, mode: "all", filled: 0, skipped, failed: 0 };
+  }
+
+  const pageSummary = await preparePageSummary(target).catch(() => null);
+
+  let filled = 0;
+  let failed = 0;
+  let trackDownload = availability.status !== "available";
+
+  for (let i = 0; i < fields.length; i++) {
+    const field = fields[i];
+    if (!field.isConnected) {
+      failed++;
+      continue;
+    }
+
+    const feedback = showFeedback(field);
+    feedback.setStatus(`✨ Filling… ${i + 1}/${fields.length}`);
+
+    const result = await fillOne(field, feedback, { pageSummary, trackDownload });
+    trackDownload = false;
+
+    if (result.ok) {
+      filled++;
+      feedback.succeed();
+    } else {
+      failed++;
+      feedback.fail();
+    }
+  }
+
+  return { ok: true, mode: "all", filled, skipped, failed };
+}
+
 try {
   chrome.runtime.onMessage.addListener(
     (message: FillTrigger, _sender, sendResponse) => {
-      if (message?.type !== "nanofill/fill") return false;
-      (async () => sendResponse(await handleFill()))();
-      return true;
+      if (message?.type === "nanofill/fill") {
+        (async () => sendResponse(await handleFill()))();
+        return true;
+      }
+      if (message?.type === "nanofill/fill-all") {
+        (async () => sendResponse(await handleFillAll()))();
+        return true;
+      }
+      return false;
     },
   );
 } catch {
