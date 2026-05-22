@@ -2,6 +2,8 @@
 
 A Chrome extension that uses the browser's built-in Gemini Nano (Prompt API / Summarizer API) to fill **right-clicked form fields** with contextually appropriate dummy values, taking into account surrounding labels, placeholders, other fields, and page content. Supports both single-field fill and whole-form fill.
 
+![Demo](https://i.gyazo.com/f499a5b782b35cf6747a634b42987a6a.gif)
+
 ## Requirements
 
 - Chrome 138 or later
