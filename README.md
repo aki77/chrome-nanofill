@@ -100,3 +100,4 @@ For whole-form fill, the content script first generates a **persona** — a cohe
 - Does not work on pages where Chrome extensions cannot inject content scripts (e.g. `chrome://`).
 - On first use, generation is blocked until the model download (~several GB) completes.
 - If the Summarizer API is unavailable, values are generated without page summarization.
+- A browser console warning "No output language was specified in a LanguageModel API request" appears in the offscreen document. This is harmless — `outputLanguage` is passed to `LanguageModel.create()` but the `clone()` call used for concurrent requests does not inherit it (Chrome API limitation). Output quality is not affected.
