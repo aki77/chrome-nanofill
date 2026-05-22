@@ -49,8 +49,11 @@ export type FeedbackHandle = {
 
 let activeHandle: FeedbackHandle | null = null;
 
-export function showFeedback(target: FillableElement): FeedbackHandle {
-  activeHandle?.dismiss();
+export function showFeedback(
+  target: FillableElement,
+  opts?: { multi?: boolean },
+): FeedbackHandle {
+  if (!opts?.multi) activeHandle?.dismiss();
 
   const doc = target.ownerDocument;
   ensureStyleSheet(doc);
@@ -126,6 +129,6 @@ export function showFeedback(target: FillableElement): FeedbackHandle {
     dismiss: cleanup,
   };
 
-  activeHandle = handle;
+  if (!opts?.multi) activeHandle = handle;
   return handle;
 }

@@ -35,9 +35,9 @@ pnpm build       # outputs build artifacts to dist/
 
 1. **Right-click** any form element on a page
 2. Click **Fill entire form with Nanofill** in the context menu
-3. Each empty field in the form is filled in DOM order; a progress indicator (`✨ Filling… N/M`) moves through each field in turn
+3. The extension first generates a coherent **persona** (name, email, address, scenario, etc.) for the form as a whole, then fills all empty fields in parallel using that persona
 4. Fields that already have a value are skipped; disabled and read-only fields are never touched
-5. Each field is generated with awareness of the values already filled — so later fields receive coherent context from earlier ones
+5. All fields share the same fictional identity, so name / email / address and free-text answers remain consistent with each other
 
 Supported elements:
 - `<input>` (text / search / email / url / tel / password / number / date / etc.)
@@ -51,8 +51,8 @@ A status badge is shown in the top-right corner of the field during generation:
 | State | Display |
 |-------|---------|
 | Analyzing page | ✨ Analyzing page… |
-| Generating value (single) | ✨ Filling… |
-| Generating value (form fill) | ✨ Filling… N/M |
+| Planning persona (form fill) | ✨ Planning form persona… |
+| Generating value | ✨ Filling… |
 | Downloading model | ⬇ Downloading model N% |
 | Failed | ⚠️ Failed (red · disappears after 1.5 s) |
 
@@ -80,16 +80,17 @@ src/
 │   └── feedback.ts            # generation indicator (badge + field highlight)
 └── lib/
     ├── cache.ts               # session storage cache for page summaries
-    ├── context.ts             # focus / right-click element detection / FormContext construction
+    ├── context.ts             # focus / right-click element detection / FormContext + PlannerContext construction
     ├── extract.ts             # page body extraction via Defuddle
-    ├── prompt.ts              # LanguageModel wrapper (Structured Output)
+    ├── persona.ts             # Persona type + JSON Schema for planner output
+    ├── prompt.ts              # LanguageModel wrapper (Structured Output, persona planner, session reuse)
     ├── summarize.ts           # Summarizer API wrapper (map-reduce chunk support)
     └── types.ts               # message types
 ```
 
 Right-click → the background service worker receives `chrome.contextMenus.onClicked` and sends either a `nanofill/fill` or `nanofill/fill-all` message to the content script in the target frame using `frameId`. Prompt API / Summarizer API calls are made inside the content script.
 
-For whole-form fill, the content script iterates fields in DOM order sequentially. Each field's generated value is written to the DOM before the next field is processed, so `buildContext` naturally picks up previously filled values as sibling context — giving later fields coherent awareness of earlier ones without any special logic.
+For whole-form fill, the content script first generates a **persona** — a coherent fictional identity (name, email, address, scenario, tone, etc.) for the entire form — using a dedicated planner LLM call. Fields are then filled in parallel (concurrency = 2) using `session.clone()` to share a single parent `LanguageModel` session, avoiding repeated system-prompt setup. Each field receives the persona as explicit context, ensuring cross-field consistency (name / email / address / free-text all belong to the same fictional person). If persona generation fails, fields are filled in parallel without persona context.
 
 ## Known Limitations
 
