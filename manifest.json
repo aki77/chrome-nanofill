@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Fill form fields with context-aware dummy data via right-click, powered by Chrome's built-in Gemini Nano.",
   "minimum_chrome_version": "138",
-  "permissions": ["contextMenus"],
+  "permissions": ["contextMenus", "storage"],
   "background": {
     "service_worker": "background.js",
     "type": "module"

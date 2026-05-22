@@ -16,7 +16,8 @@ Rules:
   - If lengthHint is "medium", output 2-4 sentences in a single paragraph.
   - If lengthHint is "long", output multiple short paragraphs separated by \\n\\n (single \\n inside a paragraph if needed).
 - If maxLength is present on a textarea, the total character count MUST stay within it.
-- For <input> and <select>, ignore the textarea length rules.`;
+- For <input> and <select>, ignore the textarea length rules.
+- If "pageSummary" is provided in the user message, treat it as a high-level hint about what the page is about. Use it to choose plausible values, but do not echo it verbatim.`;
 
 const RESPONSE_CONSTRAINT = {
   type: "object",
@@ -69,7 +70,11 @@ export async function generateValue({
   try {
     const userPrompt = JSON.stringify({
       language: context.pageLanguage,
-      page: { title: context.pageTitle, url: context.pageUrl },
+      page: {
+        title: context.pageTitle,
+        url: context.pageUrl,
+        summary: context.pageSummary,
+      },
       focused: context.focused,
       otherFields: context.siblings,
     });

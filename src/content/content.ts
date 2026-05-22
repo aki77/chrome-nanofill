@@ -1,14 +1,18 @@
 import {
   buildContext,
+  detectLanguage,
   getFocusedFillable,
   toFillable,
   type FillableElement,
 } from "../lib/context";
+import { getCachedEntry, hashContent, setSummary } from "../lib/cache";
+import { extractPageText } from "../lib/extract";
 import {
   generateValue,
   isPromptApiSupported,
   probeAvailability,
 } from "../lib/prompt";
+import { summarizePageText } from "../lib/summarize";
 import type { FillResult, FillTrigger } from "../lib/types";
 import { showFeedback } from "./feedback";
 
@@ -68,6 +72,34 @@ function setValue(el: FillableElement, value: string): void {
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+async function preparePageSummary(
+  target: FillableElement,
+): Promise<string | null> {
+  const doc = target.ownerDocument;
+  const { text } = extractPageText(doc);
+  if (!text || text.length < 200) return null;
+
+  const url = doc.defaultView?.location.href ?? location.href;
+  const contentHash = await hashContent(text);
+  const entry = await getCachedEntry(url);
+  if (entry?.contentHash === contentHash) return entry.summary;
+
+  const ctrl = new AbortController();
+  const timer = window.setTimeout(() => ctrl.abort(), 15_000);
+  try {
+    const summary = await summarizePageText(text, {
+      language: detectLanguage(doc),
+      signal: ctrl.signal,
+    });
+    if (summary) await setSummary(url, summary, contentHash);
+    return summary;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function handleFill(): Promise<FillResult> {
   if (!isPromptApiSupported()) {
     return { ok: false, reason: "api-unavailable" };
@@ -84,7 +116,13 @@ async function handleFill(): Promise<FillResult> {
 
   const feedback = showFeedback(target);
   try {
-    const context = buildContext(target);
+    feedback.setStatus("✨ ページ解析中…");
+    const pageSummary = await preparePageSummary(target).catch(() => null);
+
+    feedback.setStatus("✨ 入力中…");
+    const context = buildContext(target, {
+      pageSummary: pageSummary ?? undefined,
+    });
     const value = await generateValue({
       context,
       onDownloadProgress:

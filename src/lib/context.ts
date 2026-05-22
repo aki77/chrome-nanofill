@@ -64,6 +64,7 @@ export type FormContext = {
   pageTitle: string;
   pageUrl: string;
   pageLanguage: string;
+  pageSummary?: string;
   focused: FieldDescriptor;
   siblings: FieldDescriptor[];
 };
@@ -159,7 +160,14 @@ function describe(el: Element): FieldDescriptor | null {
   return null;
 }
 
-export function buildContext(focused: FillableElement): FormContext {
+export function detectLanguage(doc: Document): string {
+  return doc.documentElement.lang || navigator.language || "en";
+}
+
+export function buildContext(
+  focused: FillableElement,
+  extras?: { pageSummary?: string },
+): FormContext {
   const focusedDescriptor = describe(focused);
   if (!focusedDescriptor) {
     throw new Error("focused element is not describable");
@@ -175,10 +183,12 @@ export function buildContext(focused: FillableElement): FormContext {
       if (siblings.length >= MAX_SIBLINGS) break;
     }
   }
+  const doc = focused.ownerDocument;
   return {
-    pageTitle: clip(document.title) ?? "",
-    pageUrl: location.href,
-    pageLanguage: document.documentElement.lang || navigator.language || "en",
+    pageTitle: clip(doc.title) ?? "",
+    pageUrl: doc.defaultView?.location.href ?? "",
+    pageLanguage: detectLanguage(doc),
+    pageSummary: extras?.pageSummary,
     focused: focusedDescriptor,
     siblings,
   };
