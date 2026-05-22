@@ -1,5 +1,3 @@
-import type { Persona } from "./persona";
-
 export type FillableElement =
   | HTMLInputElement
   | HTMLTextAreaElement
@@ -67,7 +65,6 @@ export type FormContext = {
   pageUrl: string;
   pageLanguage: string;
   pageSummary?: string;
-  persona?: Persona;
   focused: FieldDescriptor;
   siblings: FieldDescriptor[];
 };
@@ -184,7 +181,7 @@ export function detectLanguage(doc: Document): SupportedOutputLanguage {
 
 export function buildContext(
   focused: FillableElement,
-  extras?: { pageSummary?: string; persona?: Persona },
+  extras?: { pageSummary?: string },
 ): FormContext {
   const focusedDescriptor = describe(focused);
   if (!focusedDescriptor) {
@@ -207,39 +204,8 @@ export function buildContext(
     pageUrl: doc.defaultView?.location.href ?? "",
     pageLanguage: detectLanguage(doc),
     pageSummary: extras?.pageSummary,
-    persona: extras?.persona,
     focused: focusedDescriptor,
     siblings,
   };
 }
 
-const MAX_PLANNER_FIELDS = 20;
-
-export type PlannerContext = {
-  pageLanguage: string;
-  pageTitle: string;
-  pageUrl: string;
-  pageSummary?: string;
-  formFields: FieldDescriptor[];
-};
-
-export function buildPlannerContext(
-  form: HTMLFormElement,
-  extras?: { pageSummary?: string },
-): PlannerContext {
-  const doc = form.ownerDocument;
-  const formFields: FieldDescriptor[] = [];
-  for (const el of Array.from(form.elements)) {
-    const desc = describe(el);
-    if (!desc) continue;
-    formFields.push(desc);
-    if (formFields.length >= MAX_PLANNER_FIELDS) break;
-  }
-  return {
-    pageLanguage: detectLanguage(doc),
-    pageTitle: clip(doc.title) ?? "",
-    pageUrl: doc.defaultView?.location.href ?? "",
-    pageSummary: extras?.pageSummary,
-    formFields,
-  };
-}

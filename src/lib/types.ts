@@ -4,7 +4,6 @@ export type FillTrigger =
 
 export type LlmRequest =
   | { type: "nanofill/llm/generate-value"; userPrompt: string; outputLanguage: string }
-  | { type: "nanofill/llm/generate-persona"; userPrompt: string; outputLanguage: string }
   | { type: "nanofill/llm/availability" };
 
 export type LlmAvailabilityStatus =

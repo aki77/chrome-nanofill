@@ -1,26 +1,28 @@
 import {
   buildContext,
-  buildPlannerContext,
   detectLanguage,
   getFocusedFillable,
   toFillable,
   type FillableElement,
 } from "../lib/context";
-import { getCachedEntry, hashContent, setSummary } from "../lib/cache";
+import {
+  getCachedEntry,
+  hashContent,
+  setSummary,
+} from "../lib/cache";
 import { extractPageText } from "../lib/extract";
 import {
   generateValue,
-  generatePersona,
   isPromptApiSupported,
   probeAvailability,
 } from "../lib/prompt";
-import type { Persona } from "../lib/persona";
 import { summarizePageText } from "../lib/summarize";
 import type { FillResult, FillTrigger } from "../lib/types";
 import { showFeedback } from "./feedback";
 import { mark, time } from "../lib/debug";
 
 const CONCURRENCY = 2;
+const SEED_COUNT = 3;
 
 async function runPool<T, R>(
   items: T[],
@@ -129,7 +131,6 @@ async function preparePageSummary(
 
 type FillOneOptions = {
   pageSummary: string | null;
-  persona?: Persona;
 };
 
 async function fillOne(
@@ -138,7 +139,6 @@ async function fillOne(
 ): Promise<{ ok: true; value: string } | { ok: false; detail?: string }> {
   const context = buildContext(target, {
     pageSummary: opts.pageSummary ?? undefined,
-    persona: opts.persona,
   });
   try {
     const value = await generateValue({ context });
@@ -256,48 +256,38 @@ async function handleFillAll(): Promise<FillResult> {
   }
 
   mark("handleFillAll start");
-  const planningFeedback = showFeedback(target);
-  planningFeedback.setStatus("✨ Analyzing page…");
+  const pageSummaryFeedback = showFeedback(target);
+  pageSummaryFeedback.setStatus("✨ Analyzing page…");
 
-  const plannerInput = buildPlannerContext(form);
-  const [pageSummary, persona] = await time("summary + persona (parallel)", () =>
-    Promise.all([
-      time("preparePageSummary (all)", () => preparePageSummary(target).catch(() => null)),
-      time("generatePersona", () => generatePersona({ input: plannerInput }).catch(() => undefined)),
-    ]),
+  const pageSummary = await time("preparePageSummary (all)", () =>
+    preparePageSummary(target).catch(() => null),
   );
-  planningFeedback.dismiss();
+  pageSummaryFeedback.dismiss();
 
-  let filled = 0;
-  let failed = 0;
-  let firstFieldDone = false;
+  type FieldResult = { ok: true; value: string } | { ok: false; detail?: string };
 
-  const results = await runPool(fields, CONCURRENCY, async (field) => {
+  async function fillOneWithFeedback(field: FillableElement, label: string): Promise<FieldResult> {
     const fb = showFeedback(field, { multi: true });
     fb.setStatus("✨ Filling…");
-
-    const result = await time("fillOne (pool)", () =>
-      fillOne(field, { pageSummary, persona }),
-    );
-    if (result.ok) {
-      if (!firstFieldDone) {
-        firstFieldDone = true;
-        mark("first field filled (all)");
-      }
-      fb.succeed();
-    } else {
-      fb.fail();
-    }
+    const result = await time(`fillOne (${label})`, () => fillOne(field, { pageSummary }));
+    if (result.ok) fb.succeed(); else fb.fail();
     return result;
-  });
-
-  for (const result of results) {
-    if (result.ok) {
-      filled++;
-    } else {
-      failed++;
-    }
   }
+
+  // Fill first SEED_COUNT fields serially so later fields can see currentValue in siblings
+  const seedResults: FieldResult[] = [];
+  for (const field of fields.slice(0, SEED_COUNT)) {
+    seedResults.push(await fillOneWithFeedback(field, "seed"));
+  }
+  if (seedResults.some((r) => r.ok)) mark("first field filled (all)");
+
+  const poolResults = await runPool(fields.slice(SEED_COUNT), CONCURRENCY, (field) =>
+    fillOneWithFeedback(field, "pool"),
+  );
+
+  const allResults = [...seedResults, ...poolResults];
+  const filled = allResults.filter((r) => r.ok).length;
+  const failed = allResults.length - filled;
 
   return { ok: true, mode: "all", filled, skipped, failed };
 }

@@ -35,9 +35,9 @@ pnpm build       # outputs build artifacts to dist/
 
 1. **Right-click** any form element on a page
 2. Click **Fill entire form with Nanofill** in the context menu
-3. The extension first generates a coherent **persona** (name, email, address, scenario, etc.) for the form as a whole, then fills all empty fields in parallel using that persona
+3. The extension fills the first few fields serially (seeding a fictional identity), then fills the remaining fields in parallel
 4. Fields that already have a value are skipped; disabled and read-only fields are never touched
-5. All fields share the same fictional identity, so name / email / address and free-text answers remain consistent with each other
+5. Because later fields receive the already-filled values as context, the model naturally produces a consistent fictional identity across name / email / address and free-text answers
 
 Supported elements:
 - `<input>` (text / search / email / url / tel / password / number / date / etc.)
@@ -51,7 +51,6 @@ A status badge is shown in the top-right corner of the field during generation:
 | State | Display |
 |-------|---------|
 | Analyzing page | ✨ Analyzing page… |
-| Planning persona (form fill) | ✨ Planning form persona… |
 | Generating value | ✨ Filling… |
 | Failed | ⚠️ Failed (red · disappears after 1.5 s) |
 
@@ -79,20 +78,19 @@ src/
 │   └── feedback.ts            # generation indicator (badge + field highlight)
 ├── offscreen/
 │   ├── offscreen.html         # minimal HTML shell for the offscreen document
-│   └── offscreen.ts           # long-lived LanguageModel sessions + message handler
+│   └── offscreen.ts           # long-lived LanguageModel session + message handler
 └── lib/
     ├── cache.ts               # session storage cache for page summaries
-    ├── context.ts             # focus / right-click element detection / FormContext + PlannerContext construction
+    ├── context.ts             # focus / right-click element detection / FormContext construction
     ├── extract.ts             # page body extraction via Defuddle
-    ├── persona.ts             # Persona type + JSON Schema for planner output
     ├── prompt.ts              # thin client: sends LLM requests to the offscreen document
     ├── summarize.ts           # Summarizer API wrapper (map-reduce chunk support)
     └── types.ts               # message types
 ```
 
-Right-click → the background service worker receives `chrome.contextMenus.onClicked` and sends either a `nanofill/fill` or `nanofill/fill-all` message to the content script in the target frame using `frameId`. Prompt API calls are routed through an **offscreen document** that keeps two long-lived `LanguageModel` sessions (one for value generation, one for persona planning) alive across all tabs for the lifetime of the extension. The content script sends `nanofill/llm/*` messages via `chrome.runtime.sendMessage`; the offscreen handler responds by calling `session.clone()` → `prompt()` → `destroy()` and returning the result. This means `LanguageModel.create()` runs only once per session type (on extension install/startup), not on every fill request.
+Right-click → the background service worker receives `chrome.contextMenus.onClicked` and sends either a `nanofill/fill` or `nanofill/fill-all` message to the content script in the target frame using `frameId`. Prompt API calls are routed through an **offscreen document** that keeps a long-lived `LanguageModel` session alive across all tabs for the lifetime of the extension. The content script sends `nanofill/llm/*` messages via `chrome.runtime.sendMessage`; the offscreen handler responds by calling `session.clone()` → `prompt()` → `destroy()` and returning the result. This means `LanguageModel.create()` runs only once (on extension install/startup), not on every fill request.
 
-For whole-form fill, the content script first generates a **persona** — a coherent fictional identity (name, email, address, scenario, tone, etc.) for the entire form. Fields are then filled in parallel (concurrency = 2), each receiving the persona as explicit context, ensuring cross-field consistency. If persona generation fails, fields are filled without persona context.
+For whole-form fill, the content script uses a **seed-first** strategy: the first few fields are filled serially so their values become visible in the `currentValue` of siblings for subsequent prompts. The remaining fields are then filled in parallel (concurrency = 2). The model reads the already-filled sibling values and naturally produces a consistent fictional identity across all fields.
 
 ## Known Limitations
 

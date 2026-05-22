@@ -1,5 +1,4 @@
-import type { FormContext, PlannerContext } from "./context";
-import { type Persona } from "./persona";
+import type { FormContext } from "./context";
 import type { LlmRequest, LlmResponse, LlmAvailabilityStatus } from "./types";
 
 export type AvailabilitySnapshot = {
@@ -27,31 +26,13 @@ function buildUserPrompt(context: FormContext): string {
       url: context.pageUrl,
       summary: context.pageSummary,
     },
-    persona: context.persona,
     focused: context.focused,
     otherFields: context.siblings,
   });
 }
 
-function buildPlannerUserPrompt(input: PlannerContext): string {
-  return JSON.stringify({
-    language: input.pageLanguage,
-    page: {
-      title: input.pageTitle,
-      url: input.pageUrl,
-      summary: input.pageSummary,
-    },
-    formFields: input.formFields,
-  });
-}
-
 export type GenerateOptions = {
   context: FormContext;
-  signal?: AbortSignal;
-};
-
-export type GeneratePersonaOptions = {
-  input: PlannerContext;
   signal?: AbortSignal;
 };
 
@@ -67,18 +48,4 @@ export async function generateValue({ context }: GenerateOptions): Promise<strin
     throw new Error(response.detail ?? response.reason);
   }
   return response.value;
-}
-
-export async function generatePersona({ input }: GeneratePersonaOptions): Promise<Persona> {
-  const userPrompt = buildPlannerUserPrompt(input);
-  const response = await chrome.runtime.sendMessage({
-    type: "nanofill/llm/generate-persona",
-    userPrompt,
-    outputLanguage: input.pageLanguage,
-  } satisfies LlmRequest) as LlmResponse<string>;
-
-  if (!response.ok) {
-    throw new Error(response.detail ?? response.reason);
-  }
-  return JSON.parse(response.value) as Persona;
 }
