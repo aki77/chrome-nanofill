@@ -23,7 +23,9 @@ Rules:
   - Never insert line breaks in <input> values.
 - For <select>, ignore the textarea length rules.
 - If "pageSummary" is provided in the user message, treat it as a high-level hint about what the page is about. Use it to choose plausible values, but do not echo it verbatim.
-- If "otherFields" contain non-empty "currentValue"s, treat those as previously filled values for this same fictional person. Choose your value to be consistent with them (same nationality, same plausible identity, same writing tone, etc.).`;
+- If "otherFields" contain non-empty "currentValue"s:
+  - NEVER copy, echo, paraphrase, or translate any sibling's currentValue into your output. Each field must be independently generated.
+  - Only when the focused field has a persona-style autocomplete attribute (e.g. name, email, tel, organization, street-address) should you use sibling values as hints to maintain a consistent fictional identity (same nationality, same writing tone, etc.).`;
 
 const RESPONSE_CONSTRAINT = {
   type: "object",

@@ -1,4 +1,4 @@
-import type { FormContext } from "./context";
+import type { FieldDescriptor, FormContext } from "./context";
 import type { LlmRequest, LlmResponse, LlmAvailabilityStatus } from "./types";
 
 export type AvailabilitySnapshot = {
@@ -18,6 +18,28 @@ export async function probeAvailability(): Promise<AvailabilitySnapshot> {
   return { status: response.value };
 }
 
+const PERSONA_AUTOCOMPLETE = new Set([
+  "name", "given-name", "additional-name", "family-name", "honorific-prefix", "honorific-suffix",
+  "nickname", "username", "email", "tel", "tel-national", "tel-local",
+  "organization", "street-address", "address-line1", "address-line2", "address-line3",
+  "address-level1", "address-level2", "address-level3", "address-level4",
+  "country", "country-name", "postal-code", "bday", "bday-day", "bday-month", "bday-year",
+  "sex", "url", "photo",
+]);
+
+function isPersonaField(field: FieldDescriptor): boolean {
+  if (!field.autocomplete) return false;
+  return field.autocomplete.split(/\s+/).some((tok) => PERSONA_AUTOCOMPLETE.has(tok));
+}
+
+function sanitizeSiblings(focused: FieldDescriptor, siblings: FieldDescriptor[]): FieldDescriptor[] {
+  if (isPersonaField(focused)) return siblings;
+  return siblings.map((s) => {
+    if (!s.currentValue) return s;
+    return { ...s, currentValue: undefined };
+  });
+}
+
 function buildUserPrompt(context: FormContext): string {
   return JSON.stringify({
     language: context.pageLanguage,
@@ -27,7 +49,7 @@ function buildUserPrompt(context: FormContext): string {
       summary: context.pageSummary,
     },
     focused: context.focused,
-    otherFields: context.siblings,
+    otherFields: sanitizeSiblings(context.focused, context.siblings),
   });
 }
 
