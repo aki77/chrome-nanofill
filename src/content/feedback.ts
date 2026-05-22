@@ -60,7 +60,7 @@ export function showFeedback(target: FillableElement): FeedbackHandle {
   badge.setAttribute("role", "status");
   badge.setAttribute("aria-live", "polite");
   badge.setAttribute("aria-atomic", "true");
-  badge.textContent = "✨ 入力中…";
+  badge.textContent = "";
   Object.assign(badge.style, {
     position: "fixed",
     zIndex: "2147483647",
@@ -112,13 +112,13 @@ export function showFeedback(target: FillableElement): FeedbackHandle {
     },
     setDownloadProgress(loaded: number) {
       const pct = Math.round(loaded * 100);
-      handle.setStatus(`⬇ モデルダウンロード中 ${pct}%`);
+      handle.setStatus(`⬇ Downloading model ${pct}%`);
     },
     succeed: cleanup,
     fail() {
       if (dismissed) return;
       failing = true;
-      badge.textContent = "⚠️ 失敗";
+      badge.textContent = "⚠️ Failed";
       badge.style.background = "rgba(220,38,38,0.95)";
       target.classList.add(TARGET_FAIL_CLASS);
       dismissTimer = window.setTimeout(cleanup, 1500);

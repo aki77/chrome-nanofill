@@ -53,7 +53,7 @@ export async function summarizePageText(
       return await summarizer.summarize(text, { signal: options.signal });
     }
 
-    // map-reduce: 段落単位で分割 → 各チャンクを要約 → 連結 → 再要約
+    // map-reduce: split by paragraph → summarize each chunk → concat → re-summarize
     const tokensPerChar = text.length > 0 ? usage / text.length : 1;
     const chunks = chunkByQuota(text, quota * CHUNK_SAFETY, tokensPerChar);
     const limited = chunks.slice(0, MAX_CHUNKS);
@@ -65,7 +65,7 @@ export async function summarizePageText(
           await summarizer.summarize(chunk, { signal: options.signal }),
         );
       } catch {
-        // 個別チャンク失敗は無視
+        // ignore individual chunk failures
       }
     }
     if (partials.length === 0) return null;

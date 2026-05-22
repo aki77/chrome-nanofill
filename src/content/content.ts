@@ -116,10 +116,10 @@ async function handleFill(): Promise<FillResult> {
 
   const feedback = showFeedback(target);
   try {
-    feedback.setStatus("✨ ページ解析中…");
+    feedback.setStatus("✨ Analyzing page…");
     const pageSummary = await preparePageSummary(target).catch(() => null);
 
-    feedback.setStatus("✨ 入力中…");
+    feedback.setStatus("✨ Filling…");
     const context = buildContext(target, {
       pageSummary: pageSummary ?? undefined,
     });
